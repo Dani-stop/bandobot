@@ -2,23 +2,29 @@
 //  - Gemini (free tier from Google AI Studio, no credit card): one retrieval pass + one generation call.
 //  - Search-only: no LLM at all, returns the most relevant passages with their page.
 import type { AgentResult, ChatTurn } from "./agent";
-import { searchBandi, type Passage } from "./search";
+import { listBandi, readPage, searchBandi, type Passage } from "./search";
 
 const GEMINI_SYSTEM = `Sei BandoBot, un assistente che aiuta i giovani a capire bandi pubblici italiani.
-Rispondi SOLO con le informazioni nei passaggi forniti. Se la risposta non c'è, dillo chiaramente.
-Cita ogni informazione con il riferimento esatto del passaggio nel formato [slug p.N].
+Rispondi SOLO con le informazioni nelle schede e nei passaggi forniti. Se la risposta non c'è, dillo chiaramente.
+Cita ogni informazione presa dai passaggi con il riferimento esatto nel formato [slug p.N]. Le scadenze delle schede sono dati verificati: indicale come "(scheda del bando)".
+Leggi con attenzione le tabelle: le righe con sigla provincia (es. IM, GE, SV) elencano sedi diverse, riportale tutte.
 Se l'utente descrive il suo profilo, confronta i requisiti uno per uno (✅ posseduto, ❌ mancante, ❓ da verificare) e dai una conclusione onesta. Non suggerire mai di dichiarare il falso.
 Scrivi in italiano semplice, frasi brevi, elenchi puntati.`;
 
 // Uses the latest user turn plus the previous one, so follow-ups ("e per il servizio civile?") keep context.
-async function retrieve(history: ChatTurn[]): Promise<Passage[]> {
+// Two searches (latest question alone, and with the previous turn), merged in page order so tables
+// and lists split across neighbouring chunks reach the model together.
+async function retrieve(history: ChatTurn[], limit = 8): Promise<Passage[]> {
   const userTurns = history.filter((t) => t.role === "user").map((t) => t.content);
-  const query = userTurns.slice(-2).join("\n").slice(-1500);
-  return searchBandi(query, undefined, 8);
-}
-
-function formatPassages(passages: Passage[]) {
-  return passages.map((p) => `[${p.document_slug} p.${p.page}]\n${p.content}`).join("\n\n---\n\n");
+  const latest = userTurns.at(-1) ?? "";
+  const withContext = userTurns.slice(-2).join("\n").slice(-1500);
+  const runs = await Promise.all([
+    searchBandi(latest, undefined, limit),
+    withContext !== latest ? searchBandi(withContext, undefined, limit) : Promise.resolve([]),
+  ]);
+  const byId = new Map<number, Passage>();
+  for (const p of runs.flat()) if (!byId.has(p.chunk_id)) byId.set(p.chunk_id, p);
+  return [...byId.values()];
 }
 
 // Picks the sentence sharing the most word stems with the question, plus the next one.
@@ -52,7 +58,14 @@ export async function answerSearchOnly(history: ChatTurn[]): Promise<AgentResult
 }
 
 export async function answerWithGemini(history: ChatTurn[]): Promise<AgentResult> {
-  const passages = await retrieve(history);
+  const [found, bandi] = await Promise.all([retrieve(history, 12), listBandi()]);
+  const passages = found.sort((a, b) => a.document_slug.localeCompare(b.document_slug) || a.page - b.page || a.chunk_id - b.chunk_id);
+  // Give the model whole pages (top 6 by relevance), so tables split across chunks arrive complete.
+  const pages = [...new Map(found.slice().sort((a, b) => b.score - a.score).map((p) => [`${p.document_slug}#${p.page}`, p])).values()].slice(0, 6);
+  const pageTexts = await Promise.all(pages.map(async (p) => `[${p.document_slug} p.${p.page}]\n${await readPage(p.document_slug, p.page)}`));
+  const catalog = bandi
+    .map((b) => `- ${b.slug}: ${b.title} · ente: ${b.ente} · scadenza domande: ${b.scadenza ? new Date(b.scadenza).toLocaleString("it-IT", { timeZone: "Europe/Rome" }) : "n.d."} · fonte: ${b.source_url}`)
+    .join("\n");
   const model = process.env.GEMINI_MODEL || "gemini-2.5-flash";
   const today = new Date().toLocaleDateString("it-IT", { timeZone: "Europe/Rome", dateStyle: "full" });
 
@@ -63,7 +76,7 @@ export async function answerWithGemini(history: ChatTurn[]): Promise<AgentResult
       {
         text:
           i === history.length - 1
-            ? `PASSAGGI DAI BANDI:\n\n${formatPassages(passages)}\n\nDOMANDA: ${turn.content}`
+            ? `SCHEDE DEI BANDI (da citare come [scheda slug]):\n${catalog}\n\nPAGINE DAI BANDI:\n\n${pageTexts.join("\n\n---\n\n")}\n\nDOMANDA: ${turn.content}`
             : turn.content,
       },
     ],
