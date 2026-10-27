@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "bandobot",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--", "-p", "3017"],
+      "cwd": "C:\\Users\\danib\\Desktop\\Progetti\\bandobot",
+      "port": 3017
+    }
+  ]
+}
