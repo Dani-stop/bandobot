@@ -12,6 +12,7 @@ Nasce da un problema vero: un bando di 10 pagine per capire, alla pagina 2, che 
 | **Vector DB** | Supabase Postgres + **pgvector**, indice HNSW, RLS in sola lettura |
 | **Ricerca ibrida** | Funzione SQL `hybrid_search`: similarità coseno **+** full-text in italiano (`tsvector`), fuse con **Reciprocal Rank Fusion** |
 | **Agente** | Claude (Anthropic SDK, tool runner) con 3 tool: `list_bandi`, `search_bandi`, `read_page`. Fa più ricerche, legge le pagine intere, cita `[slug p.N]` |
+| **Costo zero** | Senza chiavi: modalità *solo ricerca* (passaggi + estratto della frase più pertinente). Con una chiave **Gemini gratuita**: risposta generata con citazioni. La modalità si sceglie da sola in base alle chiavi presenti |
 | **MCP server** | Gli stessi tool esposti via **Model Context Protocol** (stdio) per Claude Desktop / Claude Code |
 | **Frontend** | Next.js 15 (App Router) + Tailwind, citazioni cliccabili che aprono il passaggio, traccia dei passaggi dell'agente, tema chiaro/scuro |
 

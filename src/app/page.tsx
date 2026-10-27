@@ -5,7 +5,21 @@ import { useEffect, useRef, useState } from "react";
 type Bando = { slug: string; title: string; ente: string | null; scadenza: string | null; pages: number | null };
 type Source = { chunk_id: number; document_slug: string; document_title: string; page: number; content: string };
 type Step = { tool: string; input: Record<string, unknown>; summary: string };
-type Message = { role: "user" | "assistant"; content: string; steps?: Step[]; sources?: Source[]; error?: boolean };
+type Mode = "claude" | "gemini" | "search";
+type Message = {
+  role: "user" | "assistant";
+  content: string;
+  steps?: Step[];
+  sources?: Source[];
+  mode?: Mode;
+  error?: boolean;
+};
+
+const MODE_LABEL: Record<Mode, string> = {
+  claude: "Agente Claude",
+  gemini: "Gemini (gratuito)",
+  search: "Solo ricerca, senza AI",
+};
 
 const EXAMPLES = [
   "Quali requisiti servono per il bando del Casinò di Sanremo?",
@@ -99,7 +113,10 @@ export default function Home() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Errore");
-      setMessages([...next, { role: "assistant", content: data.answer, steps: data.steps, sources: data.sources }]);
+      setMessages([
+        ...next,
+        { role: "assistant", content: data.answer, steps: data.steps, sources: data.sources, mode: data.mode },
+      ]);
     } catch (err) {
       setMessages([...next, { role: "assistant", content: (err as Error).message, error: true }]);
     } finally {
@@ -186,7 +203,10 @@ export default function Home() {
               <div key={i} className="max-w-[95%] space-y-2 text-sm">
                 {m.steps && m.steps.length > 0 && (
                   <details className="text-xs text-muted">
-                    <summary className="cursor-pointer select-none">Agente: {m.steps.length} passaggi di ricerca</summary>
+                    <summary className="cursor-pointer select-none">
+                      {m.mode && <span className="mr-2 rounded bg-accent-soft px-1.5 py-0.5 text-accent">{MODE_LABEL[m.mode]}</span>}
+                      {m.steps.length} passaggi
+                    </summary>
                     <ol className="mt-1.5 space-y-0.5 pl-4 font-mono">
                       {m.steps.map((s, j) => (
                         <li key={j}>
