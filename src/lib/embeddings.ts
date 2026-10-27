@@ -1,4 +1,4 @@
-import { pipeline, type FeatureExtractionPipeline } from "@huggingface/transformers";
+import type { FeatureExtractionPipeline } from "@huggingface/transformers";
 
 // Multilingual model (Italian works well), 384 dimensions, runs locally: no API key, no cost.
 export const EMBEDDING_MODEL = "Xenova/multilingual-e5-small";
@@ -6,8 +6,13 @@ export const EMBEDDING_DIM = 384;
 
 let extractor: Promise<FeatureExtractionPipeline> | null = null;
 
+// Loaded lazily so routes that never embed (e.g. /api/bandi) don't pull in ONNX Runtime.
 function getExtractor() {
-  extractor ??= pipeline("feature-extraction", EMBEDDING_MODEL, { dtype: "q8" });
+  extractor ??= import("@huggingface/transformers").then(({ env, pipeline }) => {
+    // Serverless file systems are read-only except /tmp: cache the downloaded model there.
+    if (process.env.VERCEL) env.cacheDir = "/tmp/hf-cache";
+    return pipeline("feature-extraction", EMBEDDING_MODEL, { dtype: "q8" });
+  });
   return extractor;
 }
 

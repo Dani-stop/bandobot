@@ -43,3 +43,5 @@ next-env.d.ts
 # generated SQL batches
 /scripts/out/
 !.env.example
+
+.vercel

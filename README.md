@@ -57,6 +57,10 @@ Claude Desktop (`claude_desktop_config.json`):
 { "mcpServers": { "bandobot": { "command": "npx", "args": ["tsx", "C:/percorso/bandobot/mcp/server.ts"] } } }
 ```
 
+## Deploy
+
+Online su **https://bandobot.vercel.app** (Vercel Hobby, regione `fra1`, gratis). Un cron giornaliero chiama `/api/bandi` così il progetto Supabase gratuito non va in pausa per inattività. Il modello di embeddings viene scaricato in `/tmp` al primo avvio; dalla build sono esclusi i binari ONNX non Linux per restare sotto il limite di 250 MB per funzione.
+
 ## Note
 
 - Le risposte si basano solo sui documenti indicizzati: se un'informazione non c'è, l'agente lo dice.
